@@ -12,9 +12,35 @@
         {
           "origin": "https://n"
         }
+      ],
+      [
+        "react-native-ble-manager",
+        {
+          "isBleRequired": "true",
+          "neverForLocation": "true"
+        }
       ]
     ],
     "name": "OpenScore",
-    "slug": "OpenScore"
+    "slug": "OpenScore",
+    "extra": {
+      "router": {
+        "origin": "https://n"
+      },
+      "eas": {
+        "projectId": "e863424e-d6f1-4dc2-b5c5-037e1b83f74d"
+      }
+    },
+    "android": {
+      "permissions": [
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT"
+      ],
+      "package": "com.phirks.OpenScore"
+    }
   }
 }
