@@ -30,7 +30,7 @@ import BleManager, {
 import { router } from 'expo-router';
 import CustomButton from '../../components/CustomButton';
 
-const SECONDS_TO_SCAN_FOR = 1;
+const SECONDS_TO_SCAN_FOR = 10;
 const SERVICE_UUIDS: string[] = [];
 const ALLOW_DUPLICATES = true;
 
@@ -46,7 +46,6 @@ declare module 'react-native-ble-manager' {
         connecting?: boolean;
     }
 }
-
 const prefix = Linking.createURL('/');
 export default function App() {
     const {
@@ -74,19 +73,16 @@ export default function App() {
     };
 
 
-    const startScan = () => {
+    const startScan = async () => {
         if (!isScanning && !isConnected) {
+            enableBluetooth();
             // reset found peripherals before scan
             setPeripherals(new Map<Peripheral['id'], Peripheral>());
 
             try {
                 console.debug('[startScan] starting scan...');
                 setIsScanning(true);
-                BleManager.scan(SERVICE_UUIDS, SECONDS_TO_SCAN_FOR, ALLOW_DUPLICATES, {
-                    matchMode: BleScanMatchMode.Sticky,
-                    scanMode: BleScanMode.LowLatency,
-                    callbackType: BleScanCallbackType.AllMatches,
-                })
+                await BleManager.scan([], 10, true)
                     .then(() => {
                         console.debug('[startScan] scan promise returned successfully.');
                     })
@@ -107,7 +103,7 @@ export default function App() {
                 .then((peripheral: Peripheral | null) => {
                     console.debug('[startCompanionScan] scan promise returned successfully.', peripheral);
                     if (peripheral != null) {
-                        setPeripherals(map=> {
+                        setPeripherals(map => {
                             return new Map(map.set(peripheral.id, peripheral));
                         });
                     }
@@ -289,7 +285,7 @@ export default function App() {
 
                 await BleManager.connect(peripheral.id);
                 setPeripheralId(peripheral.id);
-                // router.push("/scoreboard")
+                router.push("/scoreboard")
                 console.debug(`[connectPeripheral][${peripheral.id}] connected.`);
                 setPeripherals(map => {
                     let p = map.get(peripheral.id);
@@ -379,98 +375,108 @@ export default function App() {
     }
 
     useEffect(() => {
-        try {
-            BleManager.start({ showAlert: false })
-                .then(() => console.debug('BleManager started.'))
-                .catch((error: any) =>
-                    console.error('BeManager could not be started.', error),
-                );
-        } catch (error) {
-            console.error('unexpected error starting BleManager.', error);
-            return;
-        }
-
-        const listeners = [
-            bleManagerEmitter.addListener(
-                'BleManagerDiscoverPeripheral',
-                handleDiscoverPeripheral,
-            ),
-            bleManagerEmitter.addListener('BleManagerStopScan', handleStopScan),
-            bleManagerEmitter.addListener(
-                'BleManagerDisconnectPeripheral',
-                handleDisconnectedPeripheral,
-            ),
-            bleManagerEmitter.addListener(
-                'BleManagerDidUpdateValueForCharacteristic',
-                handleUpdateValueForCharacteristic,
-            ),
-            bleManagerEmitter.addListener(
-                'BleManagerConnectPeripheral',
-                handleConnectPeripheral,
-            ),
-        ];
-
-        bleManagerEmitter.addListener('BleManagerDidUpdateValueForCharacteristic', ({ value, peripheral, characteristic, service }) => {
-            switch (value[0]) {
-                case 0x00:
-                    setRightScore(value[1])
-                    break;
-                case 0x01:
-                    setLeftScore(value[1])
-                    break;
-                case 0x06:
-                    setAlarmHour(value[1])
-                    break;
-                case 0x07:
-                    setAlarmMinute(value[1])
-                    break;
-                case 0x08:
-                    if (value[1] > -1) {
-                        setTimerMinutes(value[1])
-                    }
-
-                    break;
-                case 0x09:
-                    if (value[1] > -1) {
-                        setTimerSeconds(value[1])
-                    }
-                    break;
-                case 0x0A:
-                    setTimerStarted(value[1])
-                    break;
-                case 0x1A:
-                    setHour(value[1])
-                    break;
-                case 0x1B:
-                    setMinute(value[1])
-                    break;
-                case 0x04:
-                    setMilitaryTime(value[1])
-                    break;
-
-                default:
-                    console.log("default")
-                    break;
+        const initBle = async () => {
+            await handleAndroidPermissions();
+            try {
+                await BleManager.start({ showAlert: false })
+                    .then(() => console.debug('BleManager started.'))
+                    .catch((error: any) =>
+                        console.error('BeManager could not be started.', error),
+                    );
+            } catch (error) {
+                console.error('unexpected error starting BleManager.', error);
+                return;
             }
-        })
+            console.log('BleManagerModule:', BleManagerModule);
 
-        handleAndroidPermissions();
+            const listeners = [
+                bleManagerEmitter.addListener(
+                    'BleManagerDiscoverPeripheral',
+                    handleDiscoverPeripheral,
+                ),
+                bleManagerEmitter.addListener('BleManagerStopScan', handleStopScan),
+                bleManagerEmitter.addListener(
+                    'BleManagerDisconnectPeripheral',
+                    handleDisconnectedPeripheral,
+                ),
+                // bleManagerEmitter.addListener(
+                //     'BleManagerDidUpdateValueForCharacteristic',
+                //     handleUpdateValueForCharacteristic,
+                // ),
+                bleManagerEmitter.addListener(
+                    'BleManagerConnectPeripheral',
+                    handleConnectPeripheral,
+                ),
+            ];
 
-        return () => {
-            console.debug('[app] main component unmounting. Removing listeners...');
-            for (const listener of listeners) {
-                listener.remove();
-            }
+            bleManagerEmitter.addListener('BleManagerDidUpdateValueForCharacteristic', ({ value, peripheral, characteristic, service }) => {
+                switch (value[0]) {
+                    case 0x00:
+                        setRightScore(value[1])
+                        break;
+                    case 0x01:
+                        setLeftScore(value[1])
+                        break;
+                    case 0x06:
+                        setAlarmHour(value[1])
+                        break;
+                    case 0x07:
+                        setAlarmMinute(value[1])
+                        break;
+                    case 0x08:
+                        if (value[1] > -1) {
+                            setTimerMinutes(value[1])
+                        }
+
+                        break;
+                    case 0x09:
+                        if (value[1] > -1) {
+                            setTimerSeconds(value[1])
+                        }
+                        break;
+                    case 0x0A:
+                        setTimerStarted(value[1])
+                        break;
+                    case 0x1A:
+                        setHour(value[1])
+                        break;
+                    case 0x1B:
+                        setMinute(value[1])
+                        break;
+                    case 0x04:
+                        setMilitaryTime(value[1])
+                        break;
+
+                    default:
+                        console.log("default")
+                        break;
+                }
+            })
+
+            console.debug('BLE listeners registered');
+
+            await handleAndroidPermissions();
+
+            await startScan();
+
+            return () => {
+                console.debug('[app] main component unmounting. Removing listeners...');
+                for (const listener of listeners) {
+                    listener.remove();
+                }
+            };
         };
+        initBle();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleAndroidPermissions = async () => {
         if (Platform.OS === 'android' && Platform.Version >= 31) {
-            console.debug("REQUEST PERMISSIONS");
             await PermissionsAndroid.requestMultiple([
                 PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
                 PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+                PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
             ]).then(result => {
                 if (result) {
                     console.debug(
@@ -482,9 +488,8 @@ export default function App() {
                     );
                 }
             });
-            console.debug("Permissions done");
         } else if (Platform.OS === 'android' && Platform.Version >= 23) {
-            PermissionsAndroid.check(
+            await PermissionsAndroid.check(
                 PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
             ).then(checkResult => {
                 if (checkResult) {
@@ -492,6 +497,7 @@ export default function App() {
                         '[handleAndroidPermissions] runtime permission Android <12 already OK',
                     );
                 } else {
+                    console.debug("request fine location")
                     PermissionsAndroid.request(
                         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
                     ).then(requestResult => {
@@ -526,12 +532,8 @@ export default function App() {
         );
     };
 
-    useEffect(() => {
-        startScan();
-    }, [])
-
     return (
-    <SafeAreaView className='bg-grey h-full w-full '>
+        <SafeAreaView className='bg-primary h-[100%] flex justify-center'>
             <View className='h-[30%] border-[1px] border-white ml-2 mr-2 rounded-2xl pt-3 pl-1 pr-1'>
                 <FlatList
                     data={Array.from(peripherals.values())}
@@ -544,10 +546,7 @@ export default function App() {
                 title="Show Scoreboard"
                 handlePress={startScan}
                 containerStyles='mt-7 w-[90%] mx-4 bg-blue-500'
-                textStyles={'text-3xl'} 
-                isLoading={undefined}
-                handleLongPress={undefined}            />
-            <Text> test </Text>
+                textStyles={'text-3xl'} isLoading={false} handleLongPress={undefined} />
         </SafeAreaView>
     );
 };
